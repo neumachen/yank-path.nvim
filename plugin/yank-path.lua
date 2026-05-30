@@ -1,0 +1,2 @@
+-- yank-path.nvim Neovim autoload entry.
+-- Implementation arrives in Phase 4 once the public API is in place.

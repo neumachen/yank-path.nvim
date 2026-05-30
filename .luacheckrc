@@ -1,4 +1,4 @@
--- Luacheck configuration for yank-file-path.nvim
+-- Luacheck configuration for yank-path.nvim
 std = luajit
 cache = true
 
@@ -42,8 +42,16 @@ files["**/*.lua"] = {
 }
 
 -- Plugin files
-files["lua/yank-file-path/*.lua"] = {
-  globals = { "vim" }
+files["lua/yank-path/*.lua"] = {
+  globals = { "vim" },
+}
+
+files["lua/yank-path/strategies/*.lua"] = {
+  globals = { "vim" },
+}
+
+files["lua/yank-path/picker/*.lua"] = {
+  globals = { "vim" },
 }
 
 -- Test files

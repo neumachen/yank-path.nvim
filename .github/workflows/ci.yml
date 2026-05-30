@@ -6,89 +6,55 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        neovim_version: ["v0.10.0", "v0.11.0", "nightly"]
+        neovim_version: ["v0.11.0", "v0.12.0", "nightly"]
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Install Neovim
-        uses: rhysd/action-setup-vim@v1
+        uses: rhysd/action-setup-vim@febef33995d6649302e9d88dda81e071b68f16a7 # v1.6.1
         with:
           neovim: true
           version: ${{ matrix.neovim_version }}
 
       - name: Install Lua
-        uses: leafo/gh-actions-lua@v10
+        uses: leafo/gh-actions-lua@6919171ccf181b826f44b9bca76307b577217377 # v13.0.0
         with:
           luaVersion: "5.1"
 
       - name: Install Luarocks
-        uses: leafo/gh-actions-luarocks@v4
+        uses: leafo/gh-actions-luarocks@35d062def313a7699a0d513e996bcf4352f05389 # v6.1.0
 
       - name: Install luacheck
         run: luarocks install luacheck
 
-      - name: Install stylua
-        uses: JohnnyMorganz/stylua-action@v4
+      - name: Install stylua and check formatting
+        uses: JohnnyMorganz/stylua-action@76fd70c03e6340ceaf673366712db9b20560b402 # v5.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           version: latest
-          args: --check .
+          args: --check lua/ tests/
 
       - name: Install plenary.nvim
         run: |
           mkdir -p ~/.local/share/nvim/site/pack/vendor/start/
-          git clone --depth 1 https://github.com/nvim-lua/plenary.nvim ~/.local/share/nvim/site/pack/vendor/start/plenary.nvim
+          git clone --depth 1 https://github.com/nvim-lua/plenary.nvim \
+            ~/.local/share/nvim/site/pack/vendor/start/plenary.nvim
 
       - name: Run luacheck
         run: luacheck lua/ tests/ --config .luacheckrc
-
-      - name: Check formatting
-        run: |
-          # Check if there are any Lua files to format
-          if find lua tests -name "*.lua" -type f | grep -q .; then
-            stylua --check lua/ tests/ --config-path stylua.toml
-          else
-            echo "No Lua files found to check formatting"
-            exit 1
-          fi
 
       - name: Run tests
         run: |
           nvim --version
           make test
-
-  release:
-    runs-on: ubuntu-latest
-    needs: test
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Check if version changed
-        id: version_check
-        run: |
-          if git diff HEAD~1 HEAD --name-only | grep -q "lua/yank-file-path/init.lua\|README.md"; then
-            echo "version_changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "version_changed=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Create Release
-        if: steps.version_check.outputs.version_changed == 'true'
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: v${{ github.run_number }}
-          release_name: Release v${{ github.run_number }}
-          draft: false
-          prerelease: false
