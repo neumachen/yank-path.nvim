@@ -78,14 +78,19 @@ end
 ---Look up a strategy by either its `key` or its display `name`. Used by the
 ---programmatic `yank_with` API so users can call `yank_with("absolute")`
 ---without needing to remember the single-letter shortcut.
+---
+---The key match is exact (keys are single alphanumeric characters so case
+---matters); the name match is case-insensitive so `yank_with("absolute")`
+---and `yank_with("Absolute")` both resolve.
 ---@param key_or_name string
 ---@return yank-path.Strategy|nil
 function M.find(key_or_name)
   if registry[key_or_name] then
     return registry[key_or_name]
   end
+  local lower = key_or_name:lower()
   for _, spec in pairs(registry) do
-    if spec.name == key_or_name then
+    if spec.name:lower() == lower then
       return spec
     end
   end
