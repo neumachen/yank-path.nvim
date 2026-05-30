@@ -9,7 +9,7 @@ help: ## Show this help message
 
 test: ## Run tests
 	@echo "Running tests..."
-	nvim --headless -c "PlenaryBustedDirectory tests/ {minimal_init = 'tests/minimal_init.lua'}" -c "qa!"
+	nvim --headless -c "PlenaryBustedDirectory tests/ {minimal_init = 'tests/minimal_init.lua', sequential = true}"
 
 lint: ## Run luacheck linter
 	@echo "Running luacheck..."

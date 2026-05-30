@@ -1,0 +1,231 @@
+*yank-path.txt*    Yank buffer paths through a picker-driven menu
+
+Author: neumachen
+License: MIT
+
+==============================================================================
+CONTENTS                                                  *yank-path-contents*
+
+1. Introduction ............................ |yank-path-introduction|
+2. Requirements ............................ |yank-path-requirements|
+3. Installation ............................ |yank-path-installation|
+4. Commands ................................ |yank-path-commands|
+5. Built-in strategies ..................... |yank-path-strategies|
+6. Configuration ........................... |yank-path-configuration|
+7. Lua API ................................. |yank-path-api|
+8. Architecture ............................ |yank-path-architecture|
+9. License ................................. |yank-path-license|
+
+==============================================================================
+1. INTRODUCTION                                       *yank-path-introduction*
+
+yank-path.nvim copies the current buffer's path into a register through a
+small picker-driven menu. The picker auto-detects fzf-lua, snacks.nvim, and
+vim.ui.select and uses the first available backend. Path formats are pluggable
+strategies; four are built in and more can be registered at runtime through
+the Lua API.
+
+==============================================================================
+2. REQUIREMENTS                                       *yank-path-requirements*
+
+- Neovim >= 0.11
+- Optional: fzf-lua and/or snacks.nvim for a richer picker UX
+
+==============================================================================
+3. INSTALLATION                                       *yank-path-installation*
+
+Using lazy.nvim: >lua
+    {
+      "neumachen/yank-path.nvim",
+      cmd = "YankPath",
+      opts = {},
+    }
+<
+
+Using packer.nvim: >lua
+    use({
+      "neumachen/yank-path.nvim",
+      config = function()
+        require("yank-path").setup()
+      end,
+    })
+<
+
+Using vim-plug: >vim
+    Plug 'neumachen/yank-path.nvim'
+
+    lua require("yank-path").setup()
+<
+
+==============================================================================
+4. COMMANDS                                               *yank-path-commands*
+
+                                                                   *:YankPath*
+:YankPath
+    Open the picker. Works in both normal and visual mode. In visual mode the
+    selection's line range is automatically appended to the result
+    (path:start-end for multi-line selections, path:line when start == end).
+
+    The command takes no arguments. To skip the picker and run a specific
+    strategy directly, use |yank-path.yank_with()| from the Lua API.
+
+==============================================================================
+5. BUILT-IN STRATEGIES                                  *yank-path-strategies*
+
+The picker lists strategies in alphabetical key order. Each strategy is shown
+with its single-letter shortcut.
+
+                                                          *yank-path-strategy-f*
+f  Filename
+    The :t basename of the buffer's path.
+    Example: bar.lua
+
+                                                          *yank-path-strategy-a*
+a  Absolute
+    The full absolute path with symlinks resolved.
+    Example: /home/user/proj/src/bar.lua
+
+                                                          *yank-path-strategy-r*
+r  Relative (N up)
+    Prompts for a non-negative integer N via vim.ui.input. The result keeps
+    the last N + 1 path segments, so N = 0 yields just the filename and
+    N = 2 yields the file plus its two parent directories.
+    Example: src/bar.lua (with N = 2 on /proj/src/bar.lua)
+
+                                                          *yank-path-strategy-p*
+p  Project
+    The buffer's path relative to the project root. The root is the first
+    ancestor directory containing one of `project.markers` (default `.git`).
+    If no marker is found, an error notification is emitted and nothing is
+    written to the register.
+    Example: src/bar.lua
+
+==============================================================================
+6. CONFIGURATION                                     *yank-path-configuration*
+
+                                                          *yank-path.setup()*
+require("yank-path").setup({opts})
+
+    Apply user configuration. `opts` is an optional table; calling setup()
+    with no argument or with an empty table uses the defaults below.
+
+    Schema: >lua
+        {
+          register = "+",                  -- target register
+          picker = "auto",                 -- backend selection
+          project = {
+            markers = { ".git" },          -- root marker filenames
+            find_root = nil,               -- custom resolver fn(bufnr)
+            cache = true,                  -- per-directory root cache
+          },
+        }
+<
+
+                                                       *yank-path-config-register*
+register     string  Destination register. Anything vim.fn.setreg accepts.
+                     Default: "+"
+
+                                                         *yank-path-config-picker*
+picker       string|string[]
+                     Backend selection. Accepts:
+                       - "auto"                            (default priority)
+                       - "fzf-lua" | "snacks" | "vim.ui.select"
+                       - { "fzf-lua", "vim.ui.select" }    (ordered fallback)
+                     The default priority for "auto" is:
+                       fzf-lua -> snacks -> vim.ui.select.
+
+                                                        *yank-path-config-project*
+project.markers      string[]
+                     Filenames or directory names that mark a project root.
+                     Used by the default root walker; ignored when
+                     `find_root` is set. Default: { ".git" }
+
+project.find_root    function(bufnr) -> string|nil
+                     Optional custom resolver. When set, fully replaces the
+                     built-in walker and skips caching (the caller owns
+                     caching). Default: nil
+
+project.cache        boolean
+                     Cache root lookups per buffer directory. Cache entries
+                     are invalidated automatically on |BufFilePost|.
+                     Default: true
+
+Validation failures surface as `[yank-path]` notifications at ERROR level
+without raising. The previous config is preserved when validation fails.
+
+==============================================================================
+7. LUA API                                                     *yank-path-api*
+
+                                                              *yank-path.yank()*
+require("yank-path").yank()
+    Open the picker. Equivalent to :YankPath. Use this from a keymap when
+    you want to bind a key directly to the picker flow.
+
+                                                         *yank-path.yank_with()*
+require("yank-path").yank_with({key_or_name}, {opts})
+    Run a specific strategy directly, skipping the picker.
+
+    {key_or_name} (string)  Strategy key ("a") or display name ("absolute",
+                            case-insensitive).
+    {opts}        (table)   Optional. Recognized keys:
+                              register: string  -- per-call register override
+
+    Returns true on success, false if no strategy matches.
+
+                                                  *yank-path.register_strategy()*
+require("yank-path").register_strategy({spec})
+    Register a custom strategy at runtime.
+
+    {spec} (table) Required fields:
+      key       string   single alphanumeric character; the picker shortcut
+      name      string   display name
+      desc      string   description shown in pickers that render previews
+      transform function (absolute, ctx) -> (result, err)
+
+    Returns true when the spec is accepted, false when validation fails.
+    Validation failures surface as notifications and never raise.
+
+    The {ctx} passed to {transform} contains:
+      bufnr    integer    source buffer
+      absolute string     absolute path
+      range    table|nil  visual range when invoked from visual mode
+      config   table      live config
+      continue function   async completion (result, err)
+
+    A strategy may run synchronously (return result, err) or asynchronously
+    (return nil, nil and call ctx.continue later).
+
+==============================================================================
+8. ARCHITECTURE                                       *yank-path-architecture*
+
+The plugin composes a linear pipeline: >
+    path.get(bufnr)
+      -> transform(absolute, ctx)
+      -> append_range_if_visual(result, range)
+      -> register.write(result, register)
+<
+
+Each step lives in its own module under `lua/yank-path/`:
+
+    init.lua                       public API + built-in registration
+    config.lua                     schema, defaults, validation
+    pipeline.lua                   linear composition
+    path.lua                       buffer -> absolute path
+    range.lua                      visual mode detection + range append
+    register.lua                   register write
+    util.lua                       notifications, callable, root cache
+    strategies/init.lua            registry
+    strategies/{f,a,r,p}.lua       built-in strategies
+    picker/init.lua                backend resolver
+    picker/{ui_select,fzf_lua,snacks}.lua    backend adapters
+
+Picker adapters implement is_available() and select(items, on_choice). Adding
+a new backend is a single file under `lua/yank-path/picker/`.
+
+==============================================================================
+9. LICENSE                                                  *yank-path-license*
+
+MIT. See LICENSE.
+
+==============================================================================
+vim:tw=78:ts=8:ft=help:norl:
